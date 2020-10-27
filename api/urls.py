@@ -1,4 +1,5 @@
 from django.conf.urls import include, url
+from django.urls import path
 
 #Django Rest Framework
 from rest_framework import routers
@@ -14,5 +15,9 @@ urlpatterns = [
     url(r'^register', csrf_exempt(controllers.Register.as_view())),
     url(r'^events', csrf_exempt(controllers.Events.as_view())),
     url(r'^activateifttt', csrf_exempt(controllers.ActivateIFTTT.as_view())),
+    path('dogs/', controllers.DogList.as_view()),
+    path('dogs/<int:pk>', controllers.DogDetail.as_view()),
+    path('breeds/', controllers.BreedList.as_view()),
+    path('breeds/<int:pk>', controllers.BreedDetail.as_view()),
     url(r'^', include(router.urls)),
 ]

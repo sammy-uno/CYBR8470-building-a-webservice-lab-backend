@@ -19,6 +19,8 @@ from django.shortcuts import *
 from django.db import models
 from django.contrib.auth.models import *
 from api.models import *
+from api.serializers import DogSerializer, BreedSerializer
+from rest_framework import generics
 
 #REST API
 from rest_framework import viewsets, filters, parsers, renderers
@@ -40,19 +42,19 @@ import json, datetime, pytz
 from django.core import serializers
 import requests
 
+from django.http import Http404
+
 def home(request):
    """
    Send requests to / to the ember.js clientside app
    """
-   return render_to_response('ember/index.html',
-               {}, RequestContext(request))
+   return render(request, 'ember/index.html', {})
 
 def xss_example(request):
   """
   Send requests to xss-example/ to the insecure client app
   """
-  return render_to_response('dumb-test-app/index.html',
-              {}, RequestContext(request))
+  return render(request, 'dumb-test-app/index.html', {})
 
 class Register(APIView):
     permission_classes = (AllowAny,)
@@ -60,7 +62,7 @@ class Register(APIView):
     def post(self, request, *args, **kwargs):
         # Login
         username = request.POST.get('username') #you need to apply validators to these
-        print username
+        print(username)
         password = request.POST.get('password') #you need to apply validators to these
         email = request.POST.get('email') #you need to apply validators to these
         gender = request.POST.get('gender') #you need to apply validators to these
@@ -69,7 +71,7 @@ class Register(APIView):
         city = request.POST.get('city') #you need to apply validators to these
         state = request.POST.get('state') #you need to apply validators to these
 
-        print request.POST.get('username')
+        print(request.POST.get('username'))
         if User.objects.filter(username=username).exists():
             return Response({'username': 'Username is taken.', 'status': 'error'})
         elif User.objects.filter(email=email).exists():
@@ -130,8 +132,8 @@ class Events(APIView):
         return HttpResponse(json_data, content_type='json')
 
     def post(self, request, *args, **kwargs):
-        print 'REQUEST DATA'
-        print str(request.data)
+        print('REQUEST DATA')
+        print(str(request.data))
 
         eventtype = request.data.get('eventtype')
         timestamp = int(request.data.get('timestamp'))
@@ -149,11 +151,11 @@ class Events(APIView):
         try:
             newEvent.clean_fields()
         except ValidationError as e:
-            print e
+            print(e)
             return Response({'success':False, 'error':e}, status=status.HTTP_400_BAD_REQUEST)
 
         newEvent.save()
-        print 'New Event Logged from: ' + requestor
+        print('New Event Logged from: ' + requestor)
         return Response({'success': True}, status=status.HTTP_200_OK)
 
 class ActivateIFTTT(APIView):
@@ -162,8 +164,8 @@ class ActivateIFTTT(APIView):
     renderer_classes = (renderers.JSONRenderer, )
 
     def post(self,request):
-        print 'REQUEST DATA'
-        print str(request.data)
+        print('REQUEST DATA')
+        print(str(request.data))
 
         eventtype = request.data.get('eventtype')
         timestamp = int(request.data.get('timestamp'))
@@ -171,7 +173,7 @@ class ActivateIFTTT(APIView):
         api_key = ApiKey.objects.all().first()
         event_hook = "test"
 
-        print "Creating New event"
+        print("Creating New event")
 
         newEvent = Event(
             eventtype=eventtype,
@@ -180,8 +182,8 @@ class ActivateIFTTT(APIView):
             requestor=requestor
         )
 
-        print newEvent
-        print "Sending Device Event to IFTTT hook: " + str(event_hook)
+        print(newEvent)
+        print("Sending Device Event to IFTTT hook: " + str(event_hook))
 
         #send the new event to IFTTT and print the result
         event_req = requests.post('https://maker.ifttt.com/trigger/'+str(event_hook)+'/with/key/'+api_key.key, data= {
@@ -189,16 +191,104 @@ class ActivateIFTTT(APIView):
             'value2':  "\""+str(eventtype)+"\"",
             'value3' : "\""+str(requestor)+"\""
         })
-        print event_req.text
+        print(event_req.text)
 
         #check that the event is safe to store in the databse
         try:
             newEvent.clean_fields()
         except ValidationError as e:
-            print e
+            print(e)
             return Response({'success':False, 'error':e}, status=status.HTTP_400_BAD_REQUEST)
 
         #log the event in the DB
         newEvent.save()
-        print 'New Event Logged'
+        print('New Event Logged')
         return Response({'success': True}, status=status.HTTP_200_OK)
+
+class DogList(APIView):
+    """
+    List all dogs, or create a new dog.
+    """
+    def get(self, request, format=None):
+        dogs = Dog.objects.all()
+        serializer = DogSerializer(dogs, many=True)
+        return Response(serializer.data)
+
+    def post(self, request, format=None):
+        serializer = DogSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class DogDetail(APIView):
+    """
+    Retrieve, update or delete a dog instance.
+    """
+    def get_object(self, pk):
+        try:
+            return Dog.objects.get(pk=pk)
+        except Dog.DoesNotExist:
+            raise Http404
+
+    def get(self, request, pk, format=None):
+        dog = self.get_object(pk)
+        serializer = DogSerializer(dog)
+        return Response(serializer.data)
+
+    def put(self, request, pk, format=None):
+        dog = self.get_object(pk)
+        serializer = DogSerializer(dog, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, pk, format=None):
+        dog = self.get_object(pk)
+        dog.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+class BreedList(APIView):
+    """
+    List all breeds, or create a new breed.
+    """
+    def get(self, request, format=None):
+        breeds = Breed.objects.all()
+        serializer = BreedSerializer(breeds, many=True)
+        return Response(serializer.data)
+
+    def post(self, request, format=None):
+        serializer = BreedSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class BreedDetail(APIView):
+    """
+    Retrieve, update or delete a breed instance.
+    """
+    def get_object(self, pk):
+        try:
+            return Breed.objects.get(pk=pk)
+        except Breed.DoesNotExist:
+            raise Http404
+
+    def get(self, request, pk, format=None):
+        breed = self.get_object(pk)
+        serializer = BreedSerializer(breed)
+        return Response(serializer.data)
+
+    def put(self, request, pk, format=None):
+        breed = self.get_object(pk)
+        serializer = BreedSerializer(breed, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, pk, format=None):
+        breed = self.get_object(pk)
+        breed.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
